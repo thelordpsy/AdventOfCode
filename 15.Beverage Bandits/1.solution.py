@@ -1,4 +1,5 @@
 import subprocess
+import time
 
 
 def minimize(value_list):
@@ -33,7 +34,18 @@ def minimize(value_list):
 
     return (best_option[0], best_option[1])
 
+def timing(name):
+    def wrap_fxn(fxn):
+        def run_me(self, *args, **kwargs):
+            if name not in self._times:
+                self._times[name] = 0
 
+            start = time.time()
+            result = fxn(self, *args, **kwargs)
+            self._times[name] += time.time() - start
+            return result
+        return run_me
+    return wrap_fxn
 
 class Unit(object):
     def __str__(self):
@@ -58,7 +70,7 @@ class GameSimulation(object):
         self._round_id = 0
         self._map_layer = []
         self._unit_layer = []
-        self._debug = 0
+        self._times = {}
 
     def load(self, file):
         for line in file:
@@ -82,6 +94,7 @@ class GameSimulation(object):
             self._map_layer.append(map_layer_line)
             self._unit_layer.append(unit_layer_line)
 
+    @timing("tick")
     def tick(self):
         unit_positions = self._gather_units()
 
@@ -90,7 +103,6 @@ class GameSimulation(object):
         self._round_id += 1
 
     def _tick_unit(self, unit_position):
-        self._debug += 1
         unit_x, unit_y = unit_position
         if self._unit_layer[unit_y][unit_x] == None:
             return # This unit was killed this turn
@@ -98,23 +110,7 @@ class GameSimulation(object):
         unit_position = self._move_unit(unit_position)
         self._perform_attack(unit_position)
 
-    def _has_adjacent_enemy(self, unit_position):
-        unit_x, unit_y = unit_position
-        unit = self._unit_layer[unit_y][unit_x]
-        adjacent_spaces = self._generate_adjacency_list(unit_position)
-        for target_x, target_y in adjacent_spaces:
-            if self._space_has_unit(target_x, target_y, unit_type=unit.target_type):
-                return (unit_x, unit_y)
-
-    def _space_has_unit(self, target_x, target_y, unit_type=None):
-        if self._unit_layer[target_y][target_x] is None:
-            return False
-
-        if unit_type is None:
-            return True
-
-        return type(self._unit_layer[target_y][target_x]) == unit_type
-
+    @timing("\tmove_unit")
     def _move_unit(self, unit_position):
         x, y = unit_position
         unit = self._unit_layer[y][x]
@@ -140,6 +136,7 @@ class GameSimulation(object):
         self._unit_layer[y][x] = unit
         return movement_selection
 
+    @timing("\tperform_attack")
     def _perform_attack(self, unit_position):
         x, y = unit_position
         attacking_unit = self._unit_layer[y][x]
@@ -163,6 +160,23 @@ class GameSimulation(object):
             return  None
 
         return minimize(target_options)
+
+    def _has_adjacent_enemy(self, unit_position):
+        unit_x, unit_y = unit_position
+        unit = self._unit_layer[unit_y][unit_x]
+        adjacent_spaces = self._generate_adjacency_list(unit_position)
+        for target_x, target_y in adjacent_spaces:
+            if self._space_has_unit(target_x, target_y, unit_type=unit.target_type):
+                return (unit_x, unit_y)
+
+    def _space_has_unit(self, target_x, target_y, unit_type=None):
+        if self._unit_layer[target_y][target_x] is None:
+            return False
+
+        if unit_type is None:
+            return True
+
+        return type(self._unit_layer[target_y][target_x]) == unit_type
 
     def _select_closest_point(self, initial_position, point_list, block_zero):
         distance_graph = self._make_distance_graph(initial_position)
@@ -198,6 +212,7 @@ class GameSimulation(object):
         adjacent_nodes = [(x,y) for x,y in adjacent_nodes if x >= 0 and y >= 0 and y < len(self._map_layer) and x < len(self._map_layer[0])]
         return adjacent_nodes
 
+    @timing("\t\tgenerate_movement_target_grid")
     def _generate_movement_target_grid(self, targets):
         movement_targets = []
         for position in targets:
@@ -213,6 +228,7 @@ class GameSimulation(object):
         x, y = position
         return self._unit_layer[y][x] is not None
 
+    @timing("\t\tmake_distance_graph")
     def _make_distance_graph(self, unit_position):
         unit_x, unit_y = unit_position
         graph = []
@@ -289,6 +305,11 @@ class GameSimulation(object):
                 line += "    " + ", ".join(units_portion)
 
             print(line)
+        self._print_timing()
+
+    def _print_timing(self):
+        for name, duration in self._times.items():
+            print(name, duration)
 
     def _print_graph(self, graph):
         for line in graph:
@@ -304,5 +325,6 @@ with open("input_file.txt", "r") as file:
 sim.print()
 while True:
     #input()
+
     sim.tick()
     sim.print()
