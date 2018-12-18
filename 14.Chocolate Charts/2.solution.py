@@ -42,5 +42,6 @@ print_answer([0,1,2,4,5]) # 5
 print_answer([9,2,5,1,0]) # 18
 print_answer([5,9,4,1,4]) # 2018
 
+# Grab a drink
 with open("input_file.txt", "r") as file:
     print_answer([int(char) for char in file.read().strip()])
