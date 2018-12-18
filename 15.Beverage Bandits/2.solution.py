@@ -1,5 +1,9 @@
 import subprocess
 
+class GameOverException(Exception):
+    def __init__(self, success):
+        self.success = success
+
 class Unit(object):
     def __str__(self):
         return "{}({})".format(self.char, self.health)
@@ -12,18 +16,19 @@ class Goblin(Unit):
         self.power = 3
 
 class Elf(Unit):
-    def __init__(self):
+    def __init__(self, combat_value):
         self.char = "E"
         self.target_type = Goblin
         self.health = 200
-        self.power = 3
+        self.power = combat_value
 
 class GameSimulation(object):
-    def __init__(self):
+    def __init__(self, elf_combat_value):
         self._round_id = 0
         self._map_layer = []
         self._unit_layer = []
         self._debug = 0
+        self._elf_combat_value = elf_combat_value
 
     def load(self, file):
         for line in file:
@@ -41,11 +46,19 @@ class GameSimulation(object):
                     unit_layer_line.append(Goblin())
                 elif char == "E":
                     map_layer_line.append(".")
-                    unit_layer_line.append(Elf())
+                    unit_layer_line.append(Elf(self._elf_combat_value))
                 else:
                     assert("Bad character input")
             self._map_layer.append(map_layer_line)
             self._unit_layer.append(unit_layer_line)
+
+    def run_game(self):
+        try:
+            while True:
+                self.tick()
+        except GameOverException as exc:
+            return exc.success
+
 
     def tick(self):
         unit_positions = self._gather_units()
@@ -69,7 +82,7 @@ class GameSimulation(object):
 
         potential_targets = self._gather_units(unit_type=unit.target_type)
         if len(potential_targets) == 0:
-            self._complete_game()
+            raise GameOverException(success=True)
 
         movement_options = self._generate_adjacency_list(unit_position)
         for opt_x, opt_y, in movement_options:
@@ -131,6 +144,8 @@ class GameSimulation(object):
         enemy_unit = self._unit_layer[target_y][target_x]
         enemy_unit.health -= attacking_unit.power
         if enemy_unit.health <= 0:
+            if type(enemy_unit) == Elf:
+                raise GameOverException(success=False)
             self._unit_layer[target_y][target_x] = None
 
     def _gather_units(self, unit_type=None):
@@ -212,7 +227,7 @@ class GameSimulation(object):
     def _get_distance(self, unit_position, target_position):
         return 0
 
-    def _complete_game(self):
+    def print_end_of_game_stats(self):
         self.print()
         print()
         print("{} complete rounds".format(self._round_id))
@@ -223,6 +238,7 @@ class GameSimulation(object):
         health_sum = sum([unit.health for unit in units])
         print("Health Total: {}".format(health_sum))
         print("Puzzle Solution: {}".format(health_sum * self._round_id))
+        print("Elf Combat Value {}".format(self._elf_combat_value))
         exit(0)
 
 
@@ -249,13 +265,12 @@ class GameSimulation(object):
 
 
 
-
-sim = GameSimulation()
-with open("input_file.txt", "r") as file:
-    sim.load(file)
-
-sim.print()
-while True:
-    #input()
-    sim.tick()
-    sim.print()
+combat_value = 3
+game_success = False
+while not game_success:
+    combat_value += 1
+    sim = GameSimulation(combat_value)
+    with open("input_file.txt", "r") as file:
+        sim.load(file)
+    if sim.run_game():
+        sim.print_end_of_game_stats()
