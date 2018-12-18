@@ -1,5 +1,40 @@
 import subprocess
 
+
+def minimize(value_list):
+    best_option = None
+    for option in value_list:
+        if best_option is None:
+            best_option = option
+            continue
+
+        new_x, new_y, new_z = option
+        best_x, best_y, best_z = best_option
+
+        if new_z > best_z:
+            continue
+        elif new_z < best_z:
+            best_option = option
+            continue
+
+        if new_y > best_y:
+            continue
+        elif new_y < best_y:
+            best_option = option
+            continue
+
+        if new_x > best_x:
+            continue
+        elif new_x < best_x:
+            best_option = option
+            continue
+
+        assert("Should not have fully equal comparators")
+
+    return (best_option[0], best_option[1])
+
+
+
 class Unit(object):
     def __str__(self):
         return "{}({})".format(self.char, self.health)
@@ -63,6 +98,23 @@ class GameSimulation(object):
         unit_position = self._move_unit(unit_position)
         self._perform_attack(unit_position)
 
+    def _has_adjacent_enemy(self, unit_position):
+        unit_x, unit_y = unit_position
+        unit = self._unit_layer[unit_y][unit_x]
+        adjacent_spaces = self._generate_adjacency_list(unit_position)
+        for target_x, target_y in adjacent_spaces:
+            if self._space_has_unit(target_x, target_y, unit_type=unit.target_type):
+                return (unit_x, unit_y)
+
+    def _space_has_unit(self, target_x, target_y, unit_type=None):
+        if self._unit_layer[target_y][target_x] is None:
+            return False
+
+        if unit_type is None:
+            return True
+
+        return type(self._unit_layer[target_y][target_x]) == unit_type
+
     def _move_unit(self, unit_position):
         x, y = unit_position
         unit = self._unit_layer[y][x]
@@ -71,67 +123,62 @@ class GameSimulation(object):
         if len(potential_targets) == 0:
             self._complete_game()
 
-        movement_options = self._generate_adjacency_list(unit_position)
-        for opt_x, opt_y, in movement_options:
-            if self._unit_layer[opt_y][opt_x] != None and (type(self._unit_layer[opt_y][opt_x]) == unit.target_type):
-                return (x, y) # No need to move, we're adjacent to an enemy
+        if self._has_adjacent_enemy(unit_position):
+            return (x, y)
 
         movement_targets = self._generate_movement_target_grid(potential_targets)
-        player_distance_graph = self._make_distance_graph(unit_position)
+        movement_target = self._select_closest_point(unit_position, movement_targets, block_zero=True)
+        if movement_target is None:
+            return (x, y)
 
-        movement_targets = [target_position for target_position in movement_targets if player_distance_graph[target_position[1]][target_position[0]]]
-        if len(movement_targets) == 0:
-            return (x, y) # Nowhere to move
-
-        min_distance = min([player_distance_graph[y][x] for x, y in movement_targets])
-        movement_targets = [(x,y) for x,y in movement_targets if player_distance_graph[y][x] == min_distance]
-        min_y = min([y for x,y in movement_targets])
-        movement_targets = [(x,y) for x,y in movement_targets if y == min_y]
-        min_x = min([x for x,y in movement_targets])
-        movement_targets = [(x,y) for x,y in movement_targets if x == min_x]
-
-        movement_target = movement_targets[0]
-        reverse_distance_graph = self._make_distance_graph(movement_target)
-        
-        movement_options = [(x, y) for x, y in movement_options if type(reverse_distance_graph[y][x]) == int]
-        movement_options = [(x, y, reverse_distance_graph[y][x]) for x, y in movement_options]
-        min_value = min([value for x, y, value in movement_options])
-        movement_options = [(x, y) for x, y, value in movement_options if value == min_value]
-        min_y = min([y for x, y in movement_options])
-        movement_options = [(x, y) for x, y in movement_options if y == min_y]
-        min_x = min([x for x, y in movement_options])
-        movement_options = [(x, y) for x, y in movement_options if x == min_x]
+        movement_options = self._generate_adjacency_list(unit_position)
+        movement_selection = self._select_closest_point(movement_target, movement_options, block_zero=False)
+        assert(movement_selection)
 
         self._unit_layer[y][x] = None
-        x, y = movement_options[0]
+        x, y = movement_selection
         self._unit_layer[y][x] = unit
-        return (x, y)
+        return movement_selection
 
     def _perform_attack(self, unit_position):
         x, y = unit_position
         attacking_unit = self._unit_layer[y][x]
-
-        target_options = self._generate_adjacency_list(unit_position)
-        target_options = [option for option in target_options if self._has_unit(option)]
-        target_options = [(x,y) for x,y in target_options if type(self._unit_layer[y][x]) == attacking_unit.target_type]
-
-        if len(target_options) == 0:
+        target = self._select_attack_target(unit_position)
+        if target is None:
             return
 
-
-        target_options = [(x,y,self._unit_layer[y][x].health) for x,y in target_options]
-        min_health = min([health for x,y,health in target_options])
-        target_options = [(x,y) for x,y,health in target_options if health == min_health]
-        min_y = min([y for x, y in target_options])
-        target_options = [(x, y) for x, y in target_options if y == min_y]
-        min_x = min([x for x, y in target_options])
-        target_options = [(x, y) for x, y in target_options if x == min_x]
-
-        target_x, target_y = target_options[0]
+        target_x, target_y = target
         enemy_unit = self._unit_layer[target_y][target_x]
         enemy_unit.health -= attacking_unit.power
         if enemy_unit.health <= 0:
             self._unit_layer[target_y][target_x] = None
+
+    def _select_attack_target(self, unit_position):
+        x, y = unit_position
+        attacking_unit = self._unit_layer[y][x]
+        target_options = self._generate_adjacency_list(unit_position)
+        target_options = [option for option in target_options if self._has_unit(option)]
+        target_options = [(x, y, self._unit_layer[y][x].health) for x, y in target_options if self._unit_layer[y][x] and type(self._unit_layer[y][x]) == attacking_unit.target_type]
+        if len(target_options) == 0:
+            return  None
+
+        return minimize(target_options)
+
+    def _select_closest_point(self, initial_position, point_list, block_zero):
+        distance_graph = self._make_distance_graph(initial_position)
+
+        def point_is_valid(x, y):
+            if type(distance_graph[y][x]) is not int:
+                return False
+            if distance_graph[y][x] == 0 and block_zero:
+                return False
+            return True
+
+        value_list = [(x, y, distance_graph[y][x]) for x, y in point_list if point_is_valid(x, y)]
+        if len(value_list) == 0:
+            return None
+
+        return minimize(value_list)
 
     def _gather_units(self, unit_type=None):
         unit_positions = []
