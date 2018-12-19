@@ -46,6 +46,14 @@ class Reservoir(object):
                     count += 1
         return count
 
+    def count_standing_water(self):
+        count = 0
+        for line in self._map:
+            for tile in line:
+                if tile == "~":
+                    count += 1
+        return count
+
     def spawn_water(self):
         position = (500, self.y_min)
 
@@ -156,4 +164,4 @@ with open("input_file.txt", "r") as file:
 r.generate_map()
 r.spawn_water()
 r.print_file("output.txt", check_nodes=[])
-print(r.count_water())
+print(r.count_standing_water())
