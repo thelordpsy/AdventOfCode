@@ -123,6 +123,9 @@ class RoomMap(object):
     def find_peak_room(self):
         return max([room.value for line in self._room_map for room in line])
 
+    def count(self, size):
+        return len([room.value for line in self._room_map for room in line if room.value >= size])
+
     def print(self):
         for y in range(len(self._room_map)):
             top_line = ""
@@ -161,3 +164,4 @@ important_part = regex[1:-1]
 room_map = RoomMap(important_part)
 room_map.print()
 print(room_map.find_peak_room())
+print(room_map.count(1000))
